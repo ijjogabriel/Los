@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Los Campeones Gym — Inventory</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ===== PIN LOGIN ===== -->
+<div id="pin-screen" class="screen active">
+  <div class="pin-container">
+    <div class="pin-logo">
+      <div class="pin-logo-icon">🏋️</div>
+      <h1>Los Campeones Gym</h1>
+      <p>Inventory Management</p>
+    </div>
+    <div class="pin-card">
+      <h2 id="pin-title">Enter PIN</h2>
+      <div class="pin-role-btns">
+        <button class="role-btn active" data-role="staff" onclick="selectRole('staff')">Staff</button>
+        <button class="role-btn" data-role="admin" onclick="selectRole('admin')">Admin</button>
+      </div>
+      <div class="pin-dots">
+        <span class="pin-dot" id="d0"></span>
+        <span class="pin-dot" id="d1"></span>
+        <span class="pin-dot" id="d2"></span>
+        <span class="pin-dot" id="d3"></span>
+      </div>
+      <div class="pin-keypad">
+        <button onclick="pinKey('1')">1</button>
+        <button onclick="pinKey('2')">2</button>
+        <button onclick="pinKey('3')">3</button>
+        <button onclick="pinKey('4')">4</button>
+        <button onclick="pinKey('5')">5</button>
+        <button onclick="pinKey('6')">6</button>
+        <button onclick="pinKey('7')">7</button>
+        <button onclick="pinKey('8')">8</button>
+        <button onclick="pinKey('9')">9</button>
+        <button class="pin-clear" onclick="pinClear()">⌫</button>
+        <button onclick="pinKey('0')">0</button>
+        <button class="pin-submit" onclick="pinSubmit()">✓</button>
+      </div>
+      <p id="pin-error" class="pin-error"></p>
+      <p class="pin-hint">Staff PIN: 1234 &nbsp;|&nbsp; Admin PIN: 9999</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MAIN APP ===== -->
+<div id="app-screen" class="screen">
+
+  <!-- Offline banner -->
+  <div id="offline-banner" class="offline-banner hidden">
+    Offline — changes are queued and will sync when reconnected
+  </div>
+
+  <!-- Top Nav -->
+  <nav class="topnav">
+    <div class="nav-brand">
+      <span class="nav-icon">🏋️</span>
+      <span class="nav-title">Los Campeones</span>
+    </div>
+    <div class="nav-tabs">
+      <button class="nav-tab active" data-tab="dashboard" onclick="showTab('dashboard')">Dashboard</button>
+      <button class="nav-tab" data-tab="inventory" onclick="showTab('inventory')">Inventory</button>
+      <button class="nav-tab" data-tab="history" onclick="showTab('history')">History</button>
+      <button class="nav-tab" data-tab="reports" onclick="showTab('reports')">Reports</button>
+    </div>
+    <div class="nav-right">
+      <span id="role-badge" class="role-badge"></span>
+      <button class="btn-icon" onclick="logout()" title="Logout">⏏</button>
+    </div>
+  </nav>
+
+  <!-- Mobile bottom tabs -->
+  <nav class="bottomnav">
+    <button class="bnav-tab active" data-tab="dashboard" onclick="showTab('dashboard')">
+      <span>📊</span><span>Dashboard</span>
+    </button>
+    <button class="bnav-tab" data-tab="inventory" onclick="showTab('inventory')">
+      <span>📦</span><span>Inventory</span>
+    </button>
+    <button class="bnav-tab" data-tab="history" onclick="showTab('history')">
+      <span>📋</span><span>History</span>
+    </button>
+    <button class="bnav-tab" data-tab="reports" onclick="showTab('reports')">
+      <span>📈</span><span>Reports</span>
+    </button>
+  </nav>
+
+  <main class="main-content">
+
+    <!-- ===== DASHBOARD TAB ===== -->
+    <div id="tab-dashboard" class="tab-panel active">
+      <!-- Natural Language Input -->
+      <div class="nl-card">
+        <h3 class="nl-title">Quick Log</h3>
+        <p class="nl-hint">Type anything: "sold 2 cherry Alani Nu", "restocked 24 mango Reign", "tossed 3 expired bars"</p>
+        <div class="nl-input-row">
+          <input type="text" id="nl-input" placeholder='e.g. "sold 3 watermelon Reign"' onkeydown="nlKeydown(event)" />
+          <button class="btn-primary" onclick="nlSubmit()" id="nl-btn">Log It</button>
+        </div>
+        <div id="nl-status" class="nl-status hidden"></div>
+        <div id="nl-clarify" class="nl-clarify hidden">
+          <p id="nl-clarify-text"></p>
+          <input type="text" id="nl-clarify-input" placeholder="Your answer..." onkeydown="nlClarifyKeydown(event)" />
+          <div class="nl-clarify-btns">
+            <button class="btn-primary btn-sm" onclick="nlClarifySend()">Send</button>
+            <button class="btn-ghost btn-sm" onclick="nlClarifyCancel()">Cancel</button>
+          </div>
+        </div>
+        <div id="nl-api-key-prompt" class="nl-api-prompt hidden">
+          <p>Enter your Claude API key to enable natural language input:</p>
+          <div class="nl-input-row">
+            <input type="password" id="nl-api-key-input" placeholder="sk-ant-..." />
+            <button class="btn-primary" onclick="saveApiKey()">Save</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary Cards -->
+      <div class="summary-cards">
+        <div class="summary-card">
+          <div class="sc-value" id="sc-total">0</div>
+          <div class="sc-label">Total Items</div>
+        </div>
+        <div class="summary-card warning">
+          <div class="sc-value" id="sc-low">0</div>
+          <div class="sc-label">Low Stock</div>
+        </div>
+        <div class="summary-card danger">
+          <div class="sc-value" id="sc-out">0</div>
+          <div class="sc-label">Out of Stock</div>
+        </div>
+        <div class="summary-card success">
+          <div class="sc-value" id="sc-ok">0</div>
+          <div class="sc-label">Well Stocked</div>
+        </div>
+      </div>
+
+      <!-- Category Groups -->
+      <div id="dashboard-categories"></div>
+    </div>
+
+    <!-- ===== INVENTORY TAB ===== -->
+    <div id="tab-inventory" class="tab-panel">
+      <div class="tab-toolbar">
+        <div class="toolbar-left">
+          <input type="text" id="inv-search" class="search-input" placeholder="Search items..." oninput="renderInventory()" />
+          <select id="inv-filter-cat" onchange="renderInventory()">
+            <option value="">All Categories</option>
+            <option value="supplements">Supplements & Snacks</option>
+            <option value="cleaning">Cleaning Supplies</option>
+            <option value="office">Office & Admin</option>
+          </select>
+          <select id="inv-filter-brand" onchange="renderInventory()">
+            <option value="">All Brands</option>
+          </select>
+          <select id="inv-filter-status" onchange="renderInventory()">
+            <option value="">All Status</option>
+            <option value="low">Low Stock</option>
+            <option value="out">Out of Stock</option>
+            <option value="ok">Well Stocked</option>
+          </select>
+          <select id="inv-sort" onchange="renderInventory()">
+            <option value="name">Sort: Name</option>
+            <option value="category">Sort: Category</option>
+            <option value="quantity">Sort: Quantity</option>
+            <option value="status">Sort: Status</option>
+          </select>
+        </div>
+        <div class="toolbar-right" id="admin-only-add">
+          <button class="btn-primary" onclick="openItemModal()">+ Add Item</button>
+        </div>
+      </div>
+      <div id="inventory-list" class="inventory-grid"></div>
+    </div>
+
+    <!-- ===== HISTORY TAB ===== -->
+    <div id="tab-history" class="tab-panel">
+      <div class="tab-toolbar">
+        <div class="toolbar-left">
+          <select id="hist-range" onchange="renderHistory()">
+            <option value="today">Today</option>
+            <option value="week" selected>This Week</option>
+            <option value="month">This Month</option>
+            <option value="custom">Custom Range</option>
+          </select>
+          <div id="hist-custom-range" class="hidden">
+            <input type="date" id="hist-from" onchange="renderHistory()" />
+            <span>to</span>
+            <input type="date" id="hist-to" onchange="renderHistory()" />
+          </div>
+          <select id="hist-action" onchange="renderHistory()">
+            <option value="">All Actions</option>
+            <option value="sale">Sales</option>
+            <option value="restock">Restocks</option>
+            <option value="damaged">Damaged/Expired</option>
+            <option value="return">Returns</option>
+            <option value="edit">Edits</option>
+          </select>
+          <select id="hist-item" onchange="renderHistory()">
+            <option value="">All Items</option>
+          </select>
+        </div>
+      </div>
+      <div id="history-list" class="history-list"></div>
+    </div>
+
+    <!-- ===== REPORTS TAB ===== -->
+    <div id="tab-reports" class="tab-panel">
+      <div class="tab-toolbar">
+        <div class="toolbar-left">
+          <select id="rep-range" onchange="renderReports()">
+            <option value="week">This Week</option>
+            <option value="month" selected>This Month</option>
+            <option value="all">All Time</option>
+            <option value="custom">Custom Range</option>
+          </select>
+          <div id="rep-custom-range" class="hidden">
+            <input type="date" id="rep-from" onchange="renderReports()" />
+            <span>to</span>
+            <input type="date" id="rep-to" onchange="renderReports()" />
+          </div>
+        </div>
+      </div>
+      <div class="reports-grid">
+        <div class="report-card wide">
+          <h3>Sales Trend</h3>
+          <canvas id="chart-sales-trend"></canvas>
+        </div>
+        <div class="report-card">
+          <h3>Top Sellers</h3>
+          <canvas id="chart-top-sellers"></canvas>
+        </div>
+        <div class="report-card">
+          <h3>Category Breakdown</h3>
+          <canvas id="chart-category"></canvas>
+        </div>
+        <div class="report-card wide">
+          <h3>Margins by Product</h3>
+          <div id="margins-table"></div>
+        </div>
+        <div class="report-card">
+          <h3>Low Stock Items</h3>
+          <div id="low-stock-report"></div>
+        </div>
+        <div class="report-card">
+          <h3>Restock Suggestions</h3>
+          <div id="restock-suggestions"></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ===== ITEM MODAL ===== -->
+<div id="item-modal" class="modal-overlay hidden" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">Add Item</h2>
+      <button class="btn-icon modal-close" onclick="closeItemModal()">✕</button>
+    </div>
+    <form id="item-form" onsubmit="saveItem(event)">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Name *</label>
+          <input type="text" id="f-name" required placeholder="e.g. Reign Energy Drink" />
+        </div>
+        <div class="form-group">
+          <label>Category *</label>
+          <select id="f-category" required>
+            <option value="">Select...</option>
+            <option value="supplements">Supplements & Snacks</option>
+            <option value="cleaning">Cleaning Supplies</option>
+            <option value="office">Office & Admin</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Brand</label>
+          <input type="text" id="f-brand" placeholder="e.g. Reign" />
+        </div>
+        <div class="form-group">
+          <label>Flavor</label>
+          <input type="text" id="f-flavor" placeholder="e.g. Watermelon" />
+        </div>
+        <div class="form-group">
+          <label>Type / Variant</label>
+          <input type="text" id="f-type" placeholder="e.g. Energy Drink, Pre-Workout" />
+        </div>
+        <div class="form-group">
+          <label>Current Quantity *</label>
+          <input type="number" id="f-quantity" required min="0" placeholder="0" />
+        </div>
+        <div class="form-group">
+          <label>Unit *</label>
+          <input type="text" id="f-unit" required placeholder="e.g. cans, bottles, rolls" />
+        </div>
+        <div class="form-group">
+          <label>Low-Stock Threshold *</label>
+          <input type="number" id="f-threshold" required min="0" placeholder="e.g. 6" />
+        </div>
+        <div class="form-group">
+          <label>Cost Price ($)</label>
+          <input type="number" id="f-cost" min="0" step="0.01" placeholder="0.00" />
+        </div>
+        <div class="form-group">
+          <label>Sell Price ($)</label>
+          <input type="number" id="f-sell" min="0" step="0.01" placeholder="0.00" />
+        </div>
+        <div class="form-group">
+          <label>Supplier / Vendor Name</label>
+          <input type="text" id="f-supplier" placeholder="e.g. Costco, GNC Wholesale" />
+        </div>
+        <div class="form-group">
+          <label>Supplier Contact</label>
+          <input type="text" id="f-supplier-contact" placeholder="e.g. phone or email" />
+        </div>
+        <div class="form-group full">
+          <label>Notes</label>
+          <input type="text" id="f-notes" placeholder="Optional notes" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-ghost" onclick="closeItemModal()">Cancel</button>
+        <button type="submit" class="btn-primary" id="modal-save-btn">Save Item</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== UPDATE QTY MODAL ===== -->
+<div id="qty-modal" class="modal-overlay hidden" onclick="closeModalOutside(event)">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2 id="qty-modal-title">Update Quantity</h2>
+      <button class="btn-icon modal-close" onclick="closeQtyModal()">✕</button>
+    </div>
+    <div class="form-group">
+      <label>Action</label>
+      <select id="qty-action">
+        <option value="sale">Sale</option>
+        <option value="restock">Restock</option>
+        <option value="damaged">Damaged / Expired</option>
+        <option value="return">Customer Return</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Quantity</label>
+      <input type="number" id="qty-amount" min="1" value="1" />
+    </div>
+    <div class="form-group">
+      <label>Note (optional)</label>
+      <input type="text" id="qty-note" placeholder="Optional note" />
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeQtyModal()">Cancel</button>
+      <button class="btn-primary" onclick="submitQtyUpdate()">Update</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DELETE CONFIRM MODAL ===== -->
+<div id="delete-modal" class="modal-overlay hidden" onclick="closeModalOutside(event)">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2>Delete Item?</h2>
+      <button class="btn-icon modal-close" onclick="closeDeleteModal()">✕</button>
+    </div>
+    <p id="delete-modal-text" style="padding:0 1.5rem 1rem;color:var(--text-muted)"></p>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeDeleteModal()">Cancel</button>
+      <button class="btn-danger" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
