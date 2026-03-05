@@ -15,6 +15,109 @@ let deleteItemId = null;
 let nlPendingResult = null;
 let toastTimer = null;
 
+// ===== FIREBASE / CLOUD SYNC =====
+let db = null;
+
+function getFirebaseConfig() {
+  const raw = localStorage.getItem('lc_firebase_config');
+  if (!raw || raw === 'skip') return null;
+  try { return JSON.parse(raw); } catch(e) { return null; }
+}
+
+function showFirebaseSetup() {
+  document.getElementById('firebase-setup-modal').style.display = 'flex';
+}
+
+function skipFirebaseSetup() {
+  localStorage.setItem('lc_firebase_config', 'skip');
+  document.getElementById('firebase-setup-modal').style.display = 'none';
+}
+
+function connectFirebase() {
+  const raw = document.getElementById('fb-config-input').value.trim();
+  const errEl = document.getElementById('fb-setup-error');
+  errEl.textContent = '';
+  let config;
+  try {
+    // Accept either bare JS object or JSON
+    config = JSON.parse(raw);
+  } catch(e) {
+    errEl.textContent = 'Invalid JSON — make sure all keys are in "double quotes".';
+    return;
+  }
+  if (!config.projectId || !config.apiKey) {
+    errEl.textContent = 'Config looks incomplete. Make sure projectId and apiKey are present.';
+    return;
+  }
+  localStorage.setItem('lc_firebase_config', JSON.stringify(config));
+  document.getElementById('firebase-setup-modal').style.display = 'none';
+  initFirebase(config);
+  showToast('Firebase connected! Data will sync across devices.', 'success');
+}
+
+function initFirebase(config) {
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(config);
+    db = firebase.firestore();
+    db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+  } catch(e) {
+    console.warn('Firebase init error:', e);
+    db = null;
+  }
+}
+
+function setupFirestoreListeners() {
+  if (!db) return;
+
+  db.collection('lc_items').onSnapshot(snap => {
+    items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    localStorage.setItem('lc_items', JSON.stringify(items));
+    // Seed only when Firestore confirmed empty (not from cache)
+    if (items.length === 0 && !snap.metadata.fromCache) {
+      seedDataIfEmpty();
+      return; // seedDataIfEmpty will trigger re-render via Firestore writes
+    }
+    renderDashboard();
+    renderInventory();
+    populateHistoryItemFilter();
+  }, err => console.warn('Items snapshot error:', err));
+
+  db.collection('lc_history').orderBy('timestamp', 'desc').limit(1000).onSnapshot(snap => {
+    history = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    localStorage.setItem('lc_history', JSON.stringify(history));
+    renderHistory();
+  }, err => console.warn('History snapshot error:', err));
+}
+
+// Firestore write helpers (fire-and-forget)
+function fWriteItem(item) {
+  if (!db) return;
+  const { id, ...data } = item;
+  db.collection('lc_items').doc(id).set(data).catch(console.error);
+}
+
+function fDeleteItem(id) {
+  if (!db) return;
+  db.collection('lc_items').doc(id).delete().catch(console.error);
+}
+
+function fWriteHistory(entry) {
+  if (!db) return;
+  const { id, ...data } = entry;
+  db.collection('lc_history').doc(id).set(data).catch(console.error);
+}
+
+// On page load: check config and show setup if needed
+(function checkFirebaseOnLoad() {
+  const raw = localStorage.getItem('lc_firebase_config');
+  if (!raw) {
+    showFirebaseSetup();
+  } else if (raw !== 'skip') {
+    const config = getFirebaseConfig();
+    if (config) initFirebase(config);
+  }
+})();
+
 // ===== LOCAL STORAGE =====
 function loadData() {
   try {
@@ -84,15 +187,22 @@ function pinSubmit() {
 
 // ===== APP INIT =====
 function initApp() {
-  loadData();
-  seedDataIfEmpty();
-  renderDashboard();
-  renderInventory();
-  renderHistory();
-  populateHistoryItemFilter();
   checkOffline();
   window.addEventListener('online',  () => document.getElementById('offline-banner').classList.add('hidden'));
   window.addEventListener('offline', () => document.getElementById('offline-banner').classList.remove('hidden'));
+
+  if (db) {
+    // Firestore path — listeners drive all rendering
+    setupFirestoreListeners();
+  } else {
+    // Offline / local-only path
+    loadData();
+    seedDataIfEmpty();
+    renderDashboard();
+    renderInventory();
+    renderHistory();
+    populateHistoryItemFilter();
+  }
 }
 
 function checkOffline() {
@@ -172,6 +282,12 @@ function seedDataIfEmpty() {
   });
 
   saveData();
+
+  // Push seed data to Firestore if connected
+  if (db) {
+    items.forEach(item => fWriteItem(item));
+    history.forEach(entry => fWriteHistory(entry));
+  }
 }
 
 // ===== ITEM STATUS =====
@@ -394,7 +510,7 @@ function fmtDate(d) {
 }
 
 function addHistory(item, action, qty, note, detail) {
-  history.unshift({
+  const entry = {
     id: genId(),
     timestamp: new Date().toISOString(),
     itemId: item.id,
@@ -404,8 +520,10 @@ function addHistory(item, action, qty, note, detail) {
     note: note || '',
     detail: detail || '',
     role: currentRole,
-  });
+  };
+  history.unshift(entry);
   if (history.length > 1000) history = history.slice(0, 1000);
+  fWriteHistory(entry);
 }
 
 // ===== REPORTS TAB =====
@@ -642,11 +760,13 @@ function saveItem(e) {
     const idx = items.findIndex(i => i.id === editingItemId);
     items[idx] = { ...items[idx], ...itemData };
     addHistory(items[idx], 'edit', 0, '', 'Item details edited');
+    fWriteItem(items[idx]);
     showToast('Item updated', 'success');
   } else {
     const newItem = { ...itemData, id: genId(), createdAt: new Date().toISOString() };
     items.push(newItem);
     addHistory(newItem, 'edit', 0, '', 'New item added');
+    fWriteItem(newItem);
     showToast('Item added', 'success');
   }
 
@@ -701,6 +821,7 @@ function submitQtyUpdate() {
 
   item.quantity = subtract ? item.quantity - qty : item.quantity + qty;
   addHistory(item, action, qty, note, '');
+  fWriteItem(item);
   saveData();
   closeQtyModal();
   renderDashboard();
@@ -731,6 +852,7 @@ function confirmDelete() {
   const item = items.find(i => i.id === deleteItemId);
   if (!item) return;
   items = items.filter(i => i.id !== deleteItemId);
+  fDeleteItem(deleteItemId);
   saveData();
   closeDeleteModal();
   renderDashboard();
@@ -863,6 +985,7 @@ function applyNLResult(result, originalText) {
 
   item.quantity = subtract ? item.quantity - qty : item.quantity + qty;
   addHistory(item, action, qty, originalText, '');
+  fWriteItem(item);
   saveData();
   renderDashboard();
   renderInventory();
