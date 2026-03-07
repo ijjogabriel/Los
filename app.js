@@ -191,6 +191,8 @@ function initApp() {
   window.addEventListener('online',  () => document.getElementById('offline-banner').classList.add('hidden'));
   window.addEventListener('offline', () => document.getElementById('offline-banner').classList.remove('hidden'));
 
+  runMigrations();
+
   if (db) {
     // Firestore path — listeners drive all rendering
     setupFirestoreListeners();
@@ -217,6 +219,34 @@ function logout() {
   document.getElementById('pin-error').textContent = '';
   Object.values(charts).forEach(c => c && c.destroy && c.destroy());
   charts = {};
+}
+
+// ===== MIGRATIONS =====
+function runMigrations() {
+  // v1: rename Savage → Thavage in existing saved items
+  if (!localStorage.getItem('lcg_migration_v1')) {
+    const saved = localStorage.getItem('lc_items');
+    if (saved) {
+      const fixed = saved.replace(/Savage/g, 'Thavage');
+      localStorage.setItem('lc_items', fixed);
+    }
+    // Fix in Firestore too
+    if (db) {
+      db.collection('lc_items')
+        .where('brand', '==', 'Savage')
+        .get()
+        .then(snap => {
+          snap.forEach(doc => {
+            const d = doc.data();
+            db.collection('lc_items').doc(doc.id).update({
+              brand: 'Thavage',
+              name: d.name ? d.name.replace(/Savage/g, 'Thavage') : d.name,
+            });
+          });
+        }).catch(() => {});
+    }
+    localStorage.setItem('lcg_migration_v1', '1');
+  }
 }
 
 // ===== SEED DATA =====
