@@ -74,8 +74,8 @@ function setupFirestoreListeners() {
     localStorage.setItem('lc_items', JSON.stringify(items));
     // Seed only when Firestore confirmed empty (not from cache)
     if (items.length === 0 && !snap.metadata.fromCache) {
-      seedDataIfEmpty();
-      return; // seedDataIfEmpty will trigger re-render via Firestore writes
+      seedInventory();
+      return; // seedInventory will trigger re-render via Firestore writes
     }
     renderDashboard();
     renderInventory();
@@ -197,7 +197,7 @@ function initApp() {
   } else {
     // Offline / local-only path
     loadData();
-    seedDataIfEmpty();
+    seedInventory();
     renderDashboard();
     renderInventory();
     renderHistory();
@@ -220,73 +220,190 @@ function logout() {
 }
 
 // ===== SEED DATA =====
-function seedDataIfEmpty() {
-  if (items.length > 0) return;
-  const seed = [
-    // Supplements & Snacks
-    { name:'Reign Energy Drink',  category:'supplements', brand:'Reign',              flavor:'Watermelon',       type:'Energy Drink',    quantity:24, unit:'cans',    threshold:6,  cost:1.50,  sell:3.00,  supplier:'Costco',        supplierContact:'', notes:'' },
-    { name:'Reign Energy Drink',  category:'supplements', brand:'Reign',              flavor:'Mango',            type:'Energy Drink',    quantity:18, unit:'cans',    threshold:6,  cost:1.50,  sell:3.00,  supplier:'Costco',        supplierContact:'', notes:'' },
-    { name:'Reign Energy Drink',  category:'supplements', brand:'Reign',              flavor:'Melon Mania',      type:'Energy Drink',    quantity: 9, unit:'cans',    threshold:6,  cost:1.50,  sell:3.00,  supplier:'Costco',        supplierContact:'', notes:'' },
-    { name:'Alani Nu Energy',     category:'supplements', brand:'Alani Nu',           flavor:'Cherry',           type:'Energy Drink',    quantity: 3, unit:'cans',    threshold:6,  cost:1.75,  sell:3.50,  supplier:'GNC Wholesale', supplierContact:'', notes:'' },
-    { name:'Alani Nu Energy',     category:'supplements', brand:'Alani Nu',           flavor:'Cosmic Stardust',  type:'Energy Drink',    quantity: 0, unit:'cans',    threshold:6,  cost:1.75,  sell:3.50,  supplier:'GNC Wholesale', supplierContact:'', notes:'' },
-    { name:'Alani Nu Energy',     category:'supplements', brand:'Alani Nu',           flavor:'Hawaiian Shaved Ice', type:'Energy Drink', quantity:12, unit:'cans',   threshold:6,  cost:1.75,  sell:3.50,  supplier:'GNC Wholesale', supplierContact:'', notes:'' },
-    { name:'Protein Bar',         category:'supplements', brand:'Quest',              flavor:'Chocolate Chip',   type:'Protein Bar',     quantity:12, unit:'bars',    threshold:5,  cost:1.80,  sell:3.50,  supplier:'Amazon',        supplierContact:'', notes:'' },
-    { name:'Protein Bar',         category:'supplements', brand:'Quest',              flavor:'Birthday Cake',    type:'Protein Bar',     quantity: 4, unit:'bars',    threshold:5,  cost:1.80,  sell:3.50,  supplier:'Amazon',        supplierContact:'', notes:'' },
-    { name:'Pre-Workout',         category:'supplements', brand:'C4',                 flavor:'Fruit Punch',      type:'Pre-Workout',     quantity: 2, unit:'tubs',    threshold:2,  cost:18.00, sell:35.00, supplier:'GNC Wholesale', supplierContact:'', notes:'' },
-    { name:'Creatine Monohydrate',category:'supplements', brand:'Optimum Nutrition',  flavor:'Unflavored',       type:'Creatine',        quantity: 8, unit:'tubs',    threshold:2,  cost:15.00, sell:28.00, supplier:'Amazon',        supplierContact:'', notes:'' },
-    { name:'Whey Protein',        category:'supplements', brand:'Optimum Nutrition',  flavor:'Chocolate',        type:'Protein Powder',  quantity: 4, unit:'bags',    threshold:2,  cost:28.00, sell:55.00, supplier:'Amazon',        supplierContact:'', notes:'' },
-    { name:'Whey Protein',        category:'supplements', brand:'Optimum Nutrition',  flavor:'Vanilla',          type:'Protein Powder',  quantity: 1, unit:'bags',    threshold:2,  cost:28.00, sell:55.00, supplier:'Amazon',        supplierContact:'', notes:'' },
-    { name:'Amino Energy',        category:'supplements', brand:'Optimum Nutrition',  flavor:'Watermelon',       type:'Amino Acids',     quantity: 5, unit:'tubs',    threshold:2,  cost:14.00, sell:28.00, supplier:'Amazon',        supplierContact:'', notes:'' },
-    // Cleaning Supplies
-    { name:'Disinfectant Spray',  category:'cleaning',    brand:'Lysol',              flavor:'',                 type:'Spray',           quantity: 8, unit:'bottles', threshold:3,  cost:4.00,  sell:0,     supplier:'Costco',        supplierContact:'', notes:'' },
-    { name:'Paper Towels',        category:'cleaning',    brand:'Bounty',             flavor:'',                 type:'Paper',           quantity: 2, unit:'rolls',   threshold:4,  cost:1.00,  sell:0,     supplier:'Costco',        supplierContact:'', notes:'' },
-    { name:'Gym Wipes',           category:'cleaning',    brand:'EZ Wipes',           flavor:'',                 type:'Wipes',           quantity: 5, unit:'packs',   threshold:3,  cost:6.00,  sell:0,     supplier:'Amazon',        supplierContact:'', notes:'' },
-    { name:'Hand Sanitizer',      category:'cleaning',    brand:'Purell',             flavor:'',                 type:'Sanitizer',       quantity: 6, unit:'bottles', threshold:3,  cost:3.50,  sell:0,     supplier:'Costco',        supplierContact:'', notes:'' },
-    { name:'Trash Bags',          category:'cleaning',    brand:'Glad',               flavor:'',                 type:'Bags',            quantity: 1, unit:'boxes',   threshold:2,  cost:8.00,  sell:0,     supplier:'Costco',        supplierContact:'', notes:'' },
-    // Office & Admin
-    { name:'Member Forms',        category:'office',      brand:'',                   flavor:'',                 type:'Paper',           quantity:100, unit:'sheets', threshold:20, cost:0.05,  sell:0,     supplier:'Office Depot',  supplierContact:'', notes:'Waiver & intake forms' },
-    { name:'Pens',                category:'office',      brand:'BIC',                flavor:'',                 type:'Writing',         quantity:15, unit:'pens',    threshold:5,  cost:0.30,  sell:0,     supplier:'Office Depot',  supplierContact:'', notes:'' },
-    { name:'Printer Paper',       category:'office',      brand:'',                   flavor:'',                 type:'Paper',           quantity: 3, unit:'reams',   threshold:2,  cost:5.00,  sell:0,     supplier:'Office Depot',  supplierContact:'', notes:'' },
-  ];
-  seed.forEach(s => items.push({ ...s, id: genId(), createdAt: new Date().toISOString() }));
+function normalizeCat(c) {
+  if (!c) return 'supplements';
+  const l = c.toLowerCase();
+  if (l.includes('clean')) return 'cleaning';
+  if (l.includes('office') || l.includes('admin')) return 'office';
+  return 'supplements';
+}
 
-  // Seed some history
-  const now = Date.now();
-  const sampleHistory = [
-    { action:'sale',    itemIdx:0,  qty:3,  note:'',            daysAgo:0 },
-    { action:'sale',    itemIdx:1,  qty:6,  note:'',            daysAgo:0 },
-    { action:'sale',    itemIdx:6,  qty:2,  note:'',            daysAgo:1 },
-    { action:'restock', itemIdx:0,  qty:24, note:'Costco run',  daysAgo:2 },
-    { action:'sale',    itemIdx:3,  qty:3,  note:'',            daysAgo:2 },
-    { action:'sale',    itemIdx:4,  qty:5,  note:'',            daysAgo:3 },
-    { action:'damaged', itemIdx:7,  qty:1,  note:'Expired bar', daysAgo:3 },
-    { action:'sale',    itemIdx:1,  qty:4,  note:'',            daysAgo:4 },
-    { action:'sale',    itemIdx:2,  qty:3,  note:'',            daysAgo:5 },
-    { action:'restock', itemIdx:3,  qty:12, note:'',            daysAgo:6 },
-    { action:'sale',    itemIdx:5,  qty:1,  note:'',            daysAgo:7 },
-  ];
-  sampleHistory.forEach(h => {
-    const item = items[h.itemIdx];
-    history.push({
-      id: genId(),
-      timestamp: new Date(now - h.daysAgo * 86400000 - Math.random() * 3600000).toISOString(),
-      itemId: item.id,
-      itemName: item.name + (item.flavor ? ' (' + item.flavor + ')' : ''),
-      action: h.action,
-      qty: h.qty,
-      unit: item.unit,
-      note: h.note,
-      detail: '',
-      role: 'staff',
-    });
-  });
+function seedInventory() {
+  // Never re-seed if already seeded on this device
+  if (localStorage.getItem('lcg_seeded')) return;
 
+  const ts = Date.now();
+  const rawSeed = [
+    { "name": "Pandemic Pre-Workout - Blue Raz Lemonade", "brand": "Pandemic", "flavor": "Blue Raz Lemonade", "category": "Supplements & Snacks", "quantity": 24, "unit": "bottle", "lowStockThreshold": 12, "notes": "2 full boxes of 12 - shelf" },
+    { "name": "Pandemic Pre-Workout - Dragon Fruit Watermelon", "brand": "Pandemic", "flavor": "Dragon Fruit Watermelon", "category": "Supplements & Snacks", "quantity": 18, "unit": "bottle", "lowStockThreshold": 12, "notes": "1 full box + 6 in open box - shelf" },
+    { "name": "KXR Pre-Workout - Blue Shark Gummy", "brand": "KXR", "flavor": "Blue Shark Gummy", "category": "Supplements & Snacks", "quantity": 12, "unit": "bottle", "lowStockThreshold": 6, "notes": "Full box - shelf" },
+    { "name": "Christopher's Juicy Pumps", "brand": "Christopher's", "flavor": "Juicy Pumps", "category": "Supplements & Snacks", "quantity": 17, "unit": "bottle", "lowStockThreshold": 6, "notes": "1 unopened box of 12 + 5 in open box - shelf" },
+    { "name": "Savage Pre-Workout - Berry Blast", "brand": "Savage", "flavor": "Berry Blast", "category": "Supplements & Snacks", "quantity": 12, "unit": "bottle", "lowStockThreshold": 6, "notes": "Full box - shelf" },
+    { "name": "Savage Pre-Workout - Champion Mentality", "brand": "Savage", "flavor": "Champion Mentality", "category": "Supplements & Snacks", "quantity": 12, "unit": "bottle", "lowStockThreshold": 6, "notes": "Full box - shelf" },
+    { "name": "Savage Pre-Workout - Blue Raspberry", "brand": "Savage", "flavor": "Blue Raspberry", "category": "Supplements & Snacks", "quantity": 12, "unit": "bottle", "lowStockThreshold": 6, "notes": "Full box - shelf" },
+    { "name": "Savage Pre-Workout - Rocket Pop", "brand": "Savage", "flavor": "Rocket Pop", "category": "Supplements & Snacks", "quantity": 12, "unit": "bottle", "lowStockThreshold": 6, "notes": "Full box - shelf" },
+    { "name": "Savage Pre-Workout - South Beach Slush", "brand": "Savage", "flavor": "South Beach Slush", "category": "Supplements & Snacks", "quantity": 24, "unit": "bottle", "lowStockThreshold": 12, "notes": "2 boxes - shelf" },
+    { "name": "Savage Pre-Workout - Strawberry Mango", "brand": "Savage", "flavor": "Strawberry Mango", "category": "Supplements & Snacks", "quantity": 12, "unit": "bottle", "lowStockThreshold": 6, "notes": "1 box - shelf" },
+    { "name": "Ghost Energy - Electric Limeade", "brand": "Ghost", "flavor": "Electric Limeade", "category": "Supplements & Snacks", "quantity": 8, "unit": "can", "lowStockThreshold": 4, "notes": "Shelf" },
+    { "name": "Ghost Energy - Sour Pink Lemonade", "brand": "Ghost", "flavor": "Sour Pink Lemonade", "category": "Supplements & Snacks", "quantity": 8, "unit": "can", "lowStockThreshold": 4, "notes": "Shelf" },
+    { "name": "Ghost Energy - Cherry Limeade", "brand": "Ghost", "flavor": "Cherry Limeade", "category": "Supplements & Snacks", "quantity": 9, "unit": "can", "lowStockThreshold": 4, "notes": "Shelf" },
+    { "name": "Ghost Energy - Grape Freeze", "brand": "Ghost", "flavor": "Grape Freeze", "category": "Supplements & Snacks", "quantity": 12, "unit": "can", "lowStockThreshold": 4, "notes": "Shelf" },
+    { "name": "Ghost Energy - Swedish Fish", "brand": "Ghost", "flavor": "Swedish Fish", "category": "Supplements & Snacks", "quantity": 12, "unit": "can", "lowStockThreshold": 4, "notes": "Shelf" },
+    { "name": "Ghost Energy - Cran Grape", "brand": "Ghost", "flavor": "Cran Grape", "category": "Supplements & Snacks", "quantity": 8, "unit": "can", "lowStockThreshold": 4, "notes": "Shelf" },
+    { "name": "Ghost Energy - Strawberry Mango", "brand": "Ghost", "flavor": "Strawberry Mango", "category": "Supplements & Snacks", "quantity": 12, "unit": "can", "lowStockThreshold": 4, "notes": "Shelf" },
+    { "name": "Bum Energy - Dr. Bum", "brand": "Dr. Bum", "flavor": "Dr. Bum", "category": "Supplements & Snacks", "quantity": 12, "unit": "can", "lowStockThreshold": 6, "notes": "Shelf" },
+    { "name": "Bum Energy - Cola", "brand": "Dr. Bum", "flavor": "Cola", "category": "Supplements & Snacks", "quantity": 11, "unit": "can", "lowStockThreshold": 6, "notes": "Shelf" },
+    { "name": "Bum Energy - Orange Sunrise", "brand": "Dr. Bum", "flavor": "Orange Sunrise", "category": "Supplements & Snacks", "quantity": 10, "unit": "can", "lowStockThreshold": 6, "notes": "Shelf" },
+    { "name": "Celsius - Arctic Vibe", "brand": "Celsius", "flavor": "Arctic Vibe", "category": "Supplements & Snacks", "quantity": 6, "unit": "can", "lowStockThreshold": 4, "notes": "Shelf" },
+    { "name": "Celsius - Sparkling Mango Lemonade", "brand": "Celsius", "flavor": "Sparkling Mango Lemonade", "category": "Supplements & Snacks", "quantity": 12, "unit": "can", "lowStockThreshold": 6, "notes": "Shelf" },
+    { "name": "Celsius - Retro Vibe", "brand": "Celsius", "flavor": "Retro Vibe", "category": "Supplements & Snacks", "quantity": 12, "unit": "can", "lowStockThreshold": 6, "notes": "Shelf" },
+    { "name": "Celsius - Sparkling Kiwi Strawberry", "brand": "Celsius", "flavor": "Sparkling Kiwi Strawberry", "category": "Supplements & Snacks", "quantity": 9, "unit": "can", "lowStockThreshold": 4, "notes": "Shelf" },
+    { "name": "Celsius - Sparkling Fuji Apple Pear", "brand": "Celsius", "flavor": "Sparkling Fuji Apple Pear", "category": "Supplements & Snacks", "quantity": 12, "unit": "can", "lowStockThreshold": 6, "notes": "Shelf" },
+    { "name": "Celsius - Tropical Vibe", "brand": "Celsius", "flavor": "Tropical Vibe", "category": "Supplements & Snacks", "quantity": 9, "unit": "can", "lowStockThreshold": 4, "notes": "Shelf" },
+    { "name": "Core Power Protein Shake - 42g", "brand": "Core Power", "flavor": "42g Protein", "category": "Supplements & Snacks", "quantity": 90, "unit": "bottle", "lowStockThreshold": 20, "notes": "9 packs of 10 - shelf" },
+    { "name": "LMNT Electrolytes - Orange Salt", "brand": "LMNT", "flavor": "Orange Salt", "category": "Supplements & Snacks", "quantity": 12, "unit": "packet", "lowStockThreshold": 6, "notes": "Shelf" },
+    { "name": "LMNT Electrolytes - Lemonade Salt", "brand": "LMNT", "flavor": "Lemonade Salt", "category": "Supplements & Snacks", "quantity": 12, "unit": "packet", "lowStockThreshold": 6, "notes": "Shelf" },
+    { "name": "LMNT Electrolytes - Black Cherry Salt", "brand": "LMNT", "flavor": "Black Cherry Salt", "category": "Supplements & Snacks", "quantity": 12, "unit": "packet", "lowStockThreshold": 6, "notes": "Shelf" },
+    { "name": "LMNT Electrolytes - Pineapple Salt", "brand": "LMNT", "flavor": "Pineapple Salt", "category": "Supplements & Snacks", "quantity": 12, "unit": "packet", "lowStockThreshold": 6, "notes": "Shelf" },
+    { "name": "LMNT Electrolytes - Citrus Salt", "brand": "LMNT", "flavor": "Citrus Salt", "category": "Supplements & Snacks", "quantity": 24, "unit": "packet", "lowStockThreshold": 12, "notes": "2 packs - shelf" },
+    { "name": "LMNT Electrolytes - Watermelon Salt", "brand": "LMNT", "flavor": "Watermelon Salt", "category": "Supplements & Snacks", "quantity": 24, "unit": "packet", "lowStockThreshold": 12, "notes": "2 unopened packs - shelf" },
+    { "name": "Fairlife Protein Shake - 30g", "brand": "Fairlife", "flavor": "30g Protein", "category": "Supplements & Snacks", "quantity": 30, "unit": "bottle", "lowStockThreshold": 12, "notes": "2 full packs of 12 + ~6 in open pack - shelf" },
+    { "name": "RAW Protein Bar - Strawberry Milkshake", "brand": "RAW", "flavor": "Strawberry Milkshake", "category": "Supplements & Snacks", "quantity": 12, "unit": "bar", "lowStockThreshold": 6, "notes": "Shelf" },
+    { "name": "RAW Protein Bar - Chocolate Milkshake", "brand": "RAW", "flavor": "Chocolate Milkshake", "category": "Supplements & Snacks", "quantity": 18, "unit": "bar", "lowStockThreshold": 6, "notes": "12 pack + 6 loose - shelf" },
+    { "name": "MRE Bar - Cookies and Cream", "brand": "Redcon1", "flavor": "Cookies and Cream", "category": "Supplements & Snacks", "quantity": 36, "unit": "bar", "lowStockThreshold": 12, "notes": "3 packs of 12 - shelf" },
+    { "name": "MRE Bar - Milk Chocolate", "brand": "Redcon1", "flavor": "Milk Chocolate", "category": "Supplements & Snacks", "quantity": 36, "unit": "bar", "lowStockThreshold": 12, "notes": "3 packs of 12 - shelf" },
+    { "name": "MRE Bar - Salted Caramel", "brand": "Redcon1", "flavor": "Salted Caramel", "category": "Supplements & Snacks", "quantity": 12, "unit": "bar", "lowStockThreshold": 6, "notes": "1 unopened pack - shelf" },
+    { "name": "MRE Bar - Strawberry Shortcake", "brand": "Redcon1", "flavor": "Strawberry Shortcake", "category": "Supplements & Snacks", "quantity": 24, "unit": "bar", "lowStockThreshold": 12, "notes": "2 unopened packs - shelf" },
+    { "name": "MRE Bar - Vanilla Milkshake", "brand": "Redcon1", "flavor": "Vanilla Milkshake", "category": "Supplements & Snacks", "quantity": 6, "unit": "bar", "lowStockThreshold": 4, "notes": "1 open pack - shelf" },
+    { "name": "Lean Body Protein Shake - Chocolate", "brand": "Lean Body", "flavor": "Chocolate", "category": "Supplements & Snacks", "quantity": 36, "unit": "can", "lowStockThreshold": 12, "notes": "3 packs of 12 - shelf" },
+    { "name": "Lean Body Protein Shake - Vanilla", "brand": "Lean Body", "flavor": "Vanilla", "category": "Supplements & Snacks", "quantity": 36, "unit": "can", "lowStockThreshold": 12, "notes": "3 packs of 12 - shelf" },
+    { "name": "Lean Body Protein Shake - Strawberry", "brand": "Lean Body", "flavor": "Strawberry", "category": "Supplements & Snacks", "quantity": 24, "unit": "can", "lowStockThreshold": 12, "notes": "2 unopened packs - shelf" },
+    { "name": "Lean Body Protein Shake - Salted Caramel", "brand": "Lean Body", "flavor": "Salted Caramel", "category": "Supplements & Snacks", "quantity": 12, "unit": "can", "lowStockThreshold": 6, "notes": "1 open + 1 unopened pack - shelf" },
+    { "name": "Lean Body Protein Shake - Chocolate Peanut Butter", "brand": "Lean Body", "flavor": "Chocolate Peanut Butter", "category": "Supplements & Snacks", "quantity": 6, "unit": "can", "lowStockThreshold": 4, "notes": "1 open pack - shelf" },
+    { "name": "Lean Body Protein Shake - Plant-Based Chocolate", "brand": "Lean Body", "flavor": "Plant-Based Chocolate", "category": "Supplements & Snacks", "quantity": 6, "unit": "can", "lowStockThreshold": 4, "notes": "Half pack - shelf" },
+    { "name": "Lean Body Protein Shake - Plant-Based Vanilla Caramel", "brand": "Lean Body", "flavor": "Plant-Based Vanilla Caramel", "category": "Supplements & Snacks", "quantity": 24, "unit": "can", "lowStockThreshold": 12, "notes": "2 full packs of 12 - shelf" },
+    { "name": "Monster Energy - Original", "brand": "Monster", "flavor": "Original", "category": "Supplements & Snacks", "quantity": 26, "unit": "can", "lowStockThreshold": 12, "notes": "VERIFY COUNT - 12 loose + 1 pack (count unknown) - shelf" },
+    { "name": "Monster Energy - White Ultra", "brand": "Monster", "flavor": "White Ultra", "category": "Supplements & Snacks", "quantity": 29, "unit": "can", "lowStockThreshold": 12, "notes": "VERIFY COUNT - 5 loose + 2 packs (count unknown) - shelf" },
+    { "name": "Gatorade Thirst Quencher - Assorted", "brand": "Gatorade", "flavor": "Assorted", "category": "Supplements & Snacks", "quantity": 28, "unit": "bottle", "lowStockThreshold": 12, "notes": "28-pack of 12oz bottles - shelf" },
+    { "name": "Vitamin Water - Assorted", "brand": "Vitamin Water", "flavor": "XXX / Power C / Energy", "category": "Supplements & Snacks", "quantity": 20, "unit": "bottle", "lowStockThreshold": 8, "notes": "Shelf" },
+    { "name": "LMNT Electrolytes - Black Cherry Salt (Cooler)", "brand": "LMNT", "flavor": "Black Cherry Salt", "category": "Supplements & Snacks", "quantity": 8, "unit": "packet", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "LMNT Electrolytes - Lemonade Salt (Cooler)", "brand": "LMNT", "flavor": "Lemonade Salt", "category": "Supplements & Snacks", "quantity": 8, "unit": "packet", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "LMNT Electrolytes - Pineapple Salt (Cooler)", "brand": "LMNT", "flavor": "Pineapple Salt", "category": "Supplements & Snacks", "quantity": 8, "unit": "packet", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "LMNT Electrolytes - Watermelon Salt (Cooler)", "brand": "LMNT", "flavor": "Watermelon Salt", "category": "Supplements & Snacks", "quantity": 8, "unit": "packet", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "LMNT Electrolytes - Grapefruit Salt (Cooler)", "brand": "LMNT", "flavor": "Grapefruit Salt", "category": "Supplements & Snacks", "quantity": 8, "unit": "packet", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "LMNT Electrolytes - Citrus Salt (Cooler)", "brand": "LMNT", "flavor": "Citrus Salt", "category": "Supplements & Snacks", "quantity": 8, "unit": "packet", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "KXR Pre-Workout - Black Shark Gummy (Cooler)", "brand": "KXR", "flavor": "Black Shark Gummy", "category": "Supplements & Snacks", "quantity": 2, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "KXR Pre-Workout - Sour Candy (Cooler)", "brand": "KXR", "flavor": "Sour Candy", "category": "Supplements & Snacks", "quantity": 2, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Evogen Pre-Workout - Sour Blue Gummy (Cooler)", "brand": "Evogen", "flavor": "Sour Blue Gummy", "category": "Supplements & Snacks", "quantity": 7, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Evogen Pre-Workout - Tropical Splash (Cooler)", "brand": "Evogen", "flavor": "Tropical Splash", "category": "Supplements & Snacks", "quantity": 8, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Evogen Pre-Workout - Tangerine Blast (Cooler)", "brand": "Evogen", "flavor": "Tangerine Blast", "category": "Supplements & Snacks", "quantity": 5, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "110% Pre-Workout - Lemonade (Cooler)", "brand": "110%", "flavor": "Lemonade", "category": "Supplements & Snacks", "quantity": 5, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "110% Pre-Workout - Black Cherry (Cooler)", "brand": "110%", "flavor": "Black Cherry", "category": "Supplements & Snacks", "quantity": 4, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Pandemic Pre-Workout - Dragon Fruit Watermelon (Cooler)", "brand": "Pandemic", "flavor": "Dragon Fruit Watermelon", "category": "Supplements & Snacks", "quantity": 8, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Pandemic Pre-Workout - Blue Raz Lemonade (Cooler)", "brand": "Pandemic", "flavor": "Blue Raz Lemonade", "category": "Supplements & Snacks", "quantity": 8, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Hostility Pre-Workout - Citrus Shock (Cooler)", "brand": "Hostility", "flavor": "Citrus Shock", "category": "Supplements & Snacks", "quantity": 8, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Hostility Pre-Workout - Strawberry Kiwi (Cooler)", "brand": "Hostility", "flavor": "Strawberry Kiwi", "category": "Supplements & Snacks", "quantity": 8, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Charge Pre-Workout - Watermelon Candy (Cooler)", "brand": "Charge", "flavor": "Watermelon Candy", "category": "Supplements & Snacks", "quantity": 8, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "C4 Pre-Workout - Blue Raspberry (Cooler)", "brand": "C4", "flavor": "Blue Raspberry", "category": "Supplements & Snacks", "quantity": 8, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "C4 Pre-Workout - Arctic Snow Cone (Cooler)", "brand": "C4", "flavor": "Arctic Snow Cone", "category": "Supplements & Snacks", "quantity": 8, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "C4 Pre-Workout - Watermelon (Cooler)", "brand": "C4", "flavor": "Watermelon", "category": "Supplements & Snacks", "quantity": 8, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "C4 Pre-Workout - Icy Blue Raspberry (Cooler)", "brand": "C4", "flavor": "Icy Blue Raspberry", "category": "Supplements & Snacks", "quantity": 8, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Savage Pre-Workout - Berry Blast (Cooler)", "brand": "Savage", "flavor": "Berry Blast", "category": "Supplements & Snacks", "quantity": 5, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Savage Pre-Workout - Champion Mentality (Cooler)", "brand": "Savage", "flavor": "Champion Mentality", "category": "Supplements & Snacks", "quantity": 7, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Savage Pre-Workout - Dragon Fruit (Cooler)", "brand": "Savage", "flavor": "Dragon Fruit", "category": "Supplements & Snacks", "quantity": 4, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Savage Pre-Workout - Sour Raspberry (Cooler)", "brand": "Savage", "flavor": "Sour Raspberry", "category": "Supplements & Snacks", "quantity": 2, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Savage Pre-Workout - Rocket Pop (Cooler)", "brand": "Savage", "flavor": "Rocket Pop", "category": "Supplements & Snacks", "quantity": 8, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Savage Pre-Workout - Blue Raspberry (Cooler)", "brand": "Savage", "flavor": "Blue Raspberry", "category": "Supplements & Snacks", "quantity": 8, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Savage Pre-Workout - Secret Stuff (Cooler)", "brand": "Savage", "flavor": "Secret Stuff", "category": "Supplements & Snacks", "quantity": 3, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Savage Pre-Workout - Fruit Punch (Cooler)", "brand": "Savage", "flavor": "Fruit Punch", "category": "Supplements & Snacks", "quantity": 5, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Christopher's Juicy Pumps - Rainbow Sherbet (Cooler)", "brand": "Christopher's", "flavor": "Rainbow Sherbet", "category": "Supplements & Snacks", "quantity": 5, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Christopher's Juicy Pumps - Juicy Pumps (Cooler)", "brand": "Christopher's", "flavor": "Juicy Pumps", "category": "Supplements & Snacks", "quantity": 2, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Total War Pre-Workout - Tiger's Blood (Cooler)", "brand": "Redcon1", "flavor": "Tiger's Blood", "category": "Supplements & Snacks", "quantity": 9, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Total War Pre-Workout - Strawberry Mango (Cooler)", "brand": "Redcon1", "flavor": "Strawberry Mango", "category": "Supplements & Snacks", "quantity": 8, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Total War Pre-Workout - Grape Freeze (Cooler)", "brand": "Redcon1", "flavor": "Grape Freeze", "category": "Supplements & Snacks", "quantity": 8, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Total War Pre-Workout - Arctic Berry (Cooler)", "brand": "Redcon1", "flavor": "Arctic Berry", "category": "Supplements & Snacks", "quantity": 8, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Total War Pre-Workout - Rainbow Candy (Cooler)", "brand": "Redcon1", "flavor": "Rainbow Candy", "category": "Supplements & Snacks", "quantity": 10, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Total War Pre-Workout - Patriot (Cooler)", "brand": "Redcon1", "flavor": "Patriot", "category": "Supplements & Snacks", "quantity": 7, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Total War Pre-Workout - Baja Bomb (Cooler)", "brand": "Redcon1", "flavor": "Baja Bomb", "category": "Supplements & Snacks", "quantity": 5, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Total War Pre-Workout - Strawberry Kiwi (Cooler)", "brand": "Redcon1", "flavor": "Strawberry Kiwi", "category": "Supplements & Snacks", "quantity": 7, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Total War Pre-Workout - Pink Lemonade (Cooler)", "brand": "Redcon1", "flavor": "Pink Lemonade", "category": "Supplements & Snacks", "quantity": 7, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Total War Pre-Workout - Vice City (Cooler)", "brand": "Redcon1", "flavor": "Vice City", "category": "Supplements & Snacks", "quantity": 3, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Smart Water (Cooler)", "brand": "Smart Water", "flavor": "Still", "category": "Supplements & Snacks", "quantity": 21, "unit": "bottle", "lowStockThreshold": 10, "notes": "Mix of 23oz and 33oz - cooler" },
+    { "name": "Ice Mountain Water (Cooler)", "brand": "Ice Mountain", "flavor": "Still", "category": "Supplements & Snacks", "quantity": 18, "unit": "bottle", "lowStockThreshold": 10, "notes": "Cooler" },
+    { "name": "Bum Energy - Original (Cooler)", "brand": "Dr. Bum", "flavor": "Original Dr. Bum", "category": "Supplements & Snacks", "quantity": 6, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Bum Energy - Cherry Frost (Cooler)", "brand": "Dr. Bum", "flavor": "Cherry Frost", "category": "Supplements & Snacks", "quantity": 8, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Bum Energy - Watermelon (Cooler)", "brand": "Dr. Bum", "flavor": "Watermelon", "category": "Supplements & Snacks", "quantity": 8, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Bum Energy - Orange Sunrise (Cooler)", "brand": "Dr. Bum", "flavor": "Orange Sunrise", "category": "Supplements & Snacks", "quantity": 8, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Bum Energy - Iced Tea Lemonade (Cooler)", "brand": "Dr. Bum", "flavor": "Iced Tea Lemonade", "category": "Supplements & Snacks", "quantity": 4, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Bum Energy - Blueberry Lemonade (Cooler)", "brand": "Dr. Bum", "flavor": "Blueberry Lemonade", "category": "Supplements & Snacks", "quantity": 4, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Bum Energy - Root Beer (Cooler)", "brand": "Dr. Bum", "flavor": "Root Beer", "category": "Supplements & Snacks", "quantity": 5, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Bum Energy - Grape (Cooler)", "brand": "Dr. Bum", "flavor": "Grape", "category": "Supplements & Snacks", "quantity": 7, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Bum Energy - Hard to Kill (Cooler)", "brand": "Dr. Bum", "flavor": "Hard to Kill", "category": "Supplements & Snacks", "quantity": 6, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Alani Nu - Cherry Twist (Cooler)", "brand": "Alani Nu", "flavor": "Cherry Twist", "category": "Supplements & Snacks", "quantity": 6, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Alani Nu - Orange Kiss (Cooler)", "brand": "Alani Nu", "flavor": "Orange Kiss", "category": "Supplements & Snacks", "quantity": 1, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler - LOW STOCK" },
+    { "name": "Alani Nu - Juicy Peach (Cooler)", "brand": "Alani Nu", "flavor": "Juicy Peach", "category": "Supplements & Snacks", "quantity": 1, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler - LOW STOCK" },
+    { "name": "Alani Nu - Strawberry Sunrise (Cooler)", "brand": "Alani Nu", "flavor": "Strawberry Sunrise", "category": "Supplements & Snacks", "quantity": 8, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Alani Nu - Cotton Candy (Cooler)", "brand": "Alani Nu", "flavor": "Cotton Candy", "category": "Supplements & Snacks", "quantity": 8, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Alani Nu - Blue Slush (Cooler)", "brand": "Alani Nu", "flavor": "Blue Slush", "category": "Supplements & Snacks", "quantity": 8, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Alani Nu - Breezeberry (Cooler)", "brand": "Alani Nu", "flavor": "Breezeberry", "category": "Supplements & Snacks", "quantity": 8, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Alani Nu - Cosmic Stardust (Cooler)", "brand": "Alani Nu", "flavor": "Cosmic Stardust", "category": "Supplements & Snacks", "quantity": 6, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Alani Nu - Watermelon Wave (Cooler)", "brand": "Alani Nu", "flavor": "Watermelon Wave", "category": "Supplements & Snacks", "quantity": 8, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Alani Nu - Sherbet Swirl (Cooler)", "brand": "Alani Nu", "flavor": "Sherbet Swirl", "category": "Supplements & Snacks", "quantity": 8, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Celsius - Arctic Vibe (Cooler)", "brand": "Celsius", "flavor": "Arctic Vibe", "category": "Supplements & Snacks", "quantity": 6, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Celsius - Play Vibe (Cooler)", "brand": "Celsius", "flavor": "Play Vibe", "category": "Supplements & Snacks", "quantity": 7, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Celsius - Sports Vibe (Cooler)", "brand": "Celsius", "flavor": "Sports Vibe", "category": "Supplements & Snacks", "quantity": 5, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Celsius - Green Apple Cherry (Cooler)", "brand": "Celsius", "flavor": "Green Apple Cherry", "category": "Supplements & Snacks", "quantity": 4, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Celsius - Cosmic Vibe (Cooler)", "brand": "Celsius", "flavor": "Cosmic Vibe", "category": "Supplements & Snacks", "quantity": 6, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Celsius - Grape Rush (Cooler)", "brand": "Celsius", "flavor": "Grape Rush", "category": "Supplements & Snacks", "quantity": 7, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Celsius - Tropical Vibe (Cooler)", "brand": "Celsius", "flavor": "Tropical Vibe", "category": "Supplements & Snacks", "quantity": 6, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Celsius - Watermelon (Cooler)", "brand": "Celsius", "flavor": "Watermelon", "category": "Supplements & Snacks", "quantity": 3, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler - LOW STOCK" },
+    { "name": "Celsius - Blue Raz Lemonade (Cooler)", "brand": "Celsius", "flavor": "Blue Raz Lemonade", "category": "Supplements & Snacks", "quantity": 6, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Celsius - Kiwi Strawberry (Cooler)", "brand": "Celsius", "flavor": "Kiwi Strawberry", "category": "Supplements & Snacks", "quantity": 5, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Amino Energy - Peach Bellini (Cooler)", "brand": "Optimum Nutrition", "flavor": "Peach Bellini", "category": "Supplements & Snacks", "quantity": 5, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Amino Energy - Mango Pineapple Lemonade (Cooler)", "brand": "Optimum Nutrition", "flavor": "Mango Pineapple Lemonade", "category": "Supplements & Snacks", "quantity": 3, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Amino Energy - Blue Raspberry Rush (Cooler)", "brand": "Optimum Nutrition", "flavor": "Blue Raspberry Rush", "category": "Supplements & Snacks", "quantity": 4, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Amino Energy - Blueberry Lemonade (Cooler)", "brand": "Optimum Nutrition", "flavor": "Blueberry Lemonade", "category": "Supplements & Snacks", "quantity": 6, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Amino Energy - Cocoa Berry Breeze (Cooler)", "brand": "Optimum Nutrition", "flavor": "Cocoa Berry Breeze", "category": "Supplements & Snacks", "quantity": 5, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Red Bull - White Peach (Cooler)", "brand": "Red Bull", "flavor": "White Peach", "category": "Supplements & Snacks", "quantity": 6, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Bloom Energy - Ice Vanilla Berry (Cooler)", "brand": "Bloom", "flavor": "Ice Vanilla Berry", "category": "Supplements & Snacks", "quantity": 7, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Bloom Pops - Strawberry Watermelon (Cooler)", "brand": "Bloom", "flavor": "Strawberry Watermelon", "category": "Supplements & Snacks", "quantity": 1, "unit": "pack", "lowStockThreshold": 3, "notes": "Cooler - LOW STOCK" },
+    { "name": "Bloom Pops - Glacier Crush (Cooler)", "brand": "Bloom", "flavor": "Glacier Crush", "category": "Supplements & Snacks", "quantity": 6, "unit": "pack", "lowStockThreshold": 3, "notes": "Cooler" },
+    { "name": "Bloom Pops - Peach Mango (Cooler)", "brand": "Bloom", "flavor": "Peach Mango", "category": "Supplements & Snacks", "quantity": 4, "unit": "pack", "lowStockThreshold": 3, "notes": "Cooler" },
+    { "name": "Bloom Pops - Crisp Apple (Cooler)", "brand": "Bloom", "flavor": "Crisp Apple", "category": "Supplements & Snacks", "quantity": 3, "unit": "pack", "lowStockThreshold": 3, "notes": "Cooler" },
+    { "name": "Bloom Pops - Strawberry Cream (Cooler)", "brand": "Bloom", "flavor": "Strawberry Cream", "category": "Supplements & Snacks", "quantity": 7, "unit": "pack", "lowStockThreshold": 3, "notes": "Cooler" },
+    { "name": "OxyShred Ultra Energy - Peach Candy Rings (Cooler)", "brand": "EHPlabs", "flavor": "Peach Candy Rings", "category": "Supplements & Snacks", "quantity": 6, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "OxyShred Ultra Energy - Bahama Breeze (Cooler)", "brand": "EHPlabs", "flavor": "Bahama Breeze", "category": "Supplements & Snacks", "quantity": 7, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "Body Armor Flash IV - Tropical Punch (Cooler)", "brand": "Body Armor", "flavor": "Tropical Punch", "category": "Supplements & Snacks", "quantity": 3, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler - LOW STOCK" },
+    { "name": "Body Armor Flash IV - Strawberry Kiwi (Cooler)", "brand": "Body Armor", "flavor": "Strawberry Kiwi", "category": "Supplements & Snacks", "quantity": 5, "unit": "bottle", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "3D Energy - Strawberry Lemonade (Cooler)", "brand": "3D Energy", "flavor": "Strawberry Lemonade", "category": "Supplements & Snacks", "quantity": 4, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "3D Energy - Liberty Pop (Cooler)", "brand": "3D Energy", "flavor": "Liberty Pop", "category": "Supplements & Snacks", "quantity": 7, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+    { "name": "3D Energy - Blueberry Mix (Cooler)", "brand": "3D Energy", "flavor": "Blueberry Mix", "category": "Supplements & Snacks", "quantity": 4, "unit": "can", "lowStockThreshold": 4, "notes": "Cooler" },
+  ];
+
+  const createdAt = new Date().toISOString();
+  items = rawSeed.map((s, i) => ({
+    id:              'item_' + ts + '_' + i,
+    name:            s.name,
+    category:        normalizeCat(s.category),
+    brand:           s.brand   || '',
+    flavor:          s.flavor  || '',
+    type:            s.type    || '',
+    quantity:        s.quantity,
+    unit:            s.unit,
+    threshold:       s.lowStockThreshold,
+    cost:            s.cost    || 0,
+    sell:            s.sell    || 0,
+    supplier:        s.supplier        || '',
+    supplierContact: s.supplierContact || '',
+    notes:           s.notes   || '',
+    createdAt,
+  }));
+
+  localStorage.setItem('lcg_seeded', '1');
   saveData();
 
-  // Push seed data to Firestore if connected
   if (db) {
     items.forEach(item => fWriteItem(item));
-    history.forEach(entry => fWriteHistory(entry));
   }
 }
 
