@@ -515,6 +515,7 @@ function itemCardHTML(item) {
         <span class="item-unit">${esc(item.unit)}</span>
       </div>
       <div class="item-threshold">Threshold: ${item.threshold}</div>
+      ${item.sell > 0 ? `<span class="price-badge">$${item.sell.toFixed(2)}</span>` : ''}
       <span class="stock-badge ${sc}">${statusLabel(status)}</span>
       <div class="item-card-actions">
         <button class="btn-primary btn-sm" onclick="openQtyModal('${item.id}')">Update Qty</button>
@@ -782,30 +783,69 @@ function renderCategoryBreakdown(ph) {
 }
 
 function renderMarginsTable() {
-  const priced = items.filter(i => i.cost > 0 && i.sell > 0)
-    .map(i => ({ item:i, margin: i.sell - i.cost, pct: ((i.sell - i.cost)/i.sell*100).toFixed(1) }))
-    .sort((a,b) => b.pct - a.pct);
-
   const el = document.getElementById('margins-table');
+
+  const priced = items
+    .filter(i => i.cost > 0 && i.sell > 0)
+    .map(i => {
+      const margin    = i.sell - i.cost;
+      const pct       = (margin / i.sell * 100);
+      const estProfit = margin * (i.quantity || 0);
+      return { item: i, margin, pct, estProfit };
+    })
+    .sort((a, b) => b.pct - a.pct);
+
+  const unpriced = items.filter(i => !(i.cost > 0 && i.sell > 0));
+
   if (priced.length === 0) {
-    el.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-muted)">No pricing data available</div>';
+    el.innerHTML = `
+      <div style="text-align:center;padding:1rem;color:var(--text-muted)">No pricing data available</div>
+      ${unpriced.length > 0 ? `
+        <div style="margin-top:1rem">
+          <div style="font-weight:600;margin-bottom:0.5rem;color:var(--text-muted)">Unpriced Items (${unpriced.length})</div>
+          ${unpriced.map(i => `<div style="padding:0.25rem 0;font-size:0.875rem">${esc(i.name)}${i.flavor ? ` <span style="color:var(--text-muted)">(${esc(i.flavor)})</span>` : ''}</div>`).join('')}
+        </div>` : ''}`;
     return;
   }
+
+  // Weighted average margin across priced items
+  const totalSellValue = priced.reduce((s, r) => s + r.item.sell * r.item.quantity, 0);
+  const totalCostValue = priced.reduce((s, r) => s + r.item.cost * r.item.quantity, 0);
+  const weightedAvgPct = totalSellValue > 0
+    ? ((totalSellValue - totalCostValue) / totalSellValue * 100).toFixed(1)
+    : '0.0';
+  const totalEstProfit = priced.reduce((s, r) => s + r.estProfit, 0);
+
   el.innerHTML = `
     <div class="margins-table">
       <table>
-        <thead><tr><th>Item</th><th>Cost</th><th>Sell</th><th>Margin $</th><th>Margin %</th></tr></thead>
-        <tbody>${priced.map(r => `
-          <tr>
-            <td>${esc(r.item.name)}${r.item.flavor ? ` <span style="color:var(--text-muted);font-size:0.8em">(${esc(r.item.flavor)})</span>` : ''}</td>
-            <td>$${r.item.cost.toFixed(2)}</td>
-            <td>$${r.item.sell.toFixed(2)}</td>
-            <td class="${r.margin > 0 ? 'margin-positive' : 'margin-zero'}">$${r.margin.toFixed(2)}</td>
-            <td class="${r.margin > 0 ? 'margin-positive' : 'margin-zero'}">${r.pct}%</td>
-          </tr>`).join('')}
+        <thead><tr><th>Item</th><th>Cost</th><th>Sell</th><th>Margin %</th><th>Est. Profit (stock)</th></tr></thead>
+        <tbody>
+          ${priced.map(r => `
+            <tr>
+              <td>${esc(r.item.name)}${r.item.flavor ? ` <span style="color:var(--text-muted);font-size:0.8em">(${esc(r.item.flavor)})</span>` : ''}</td>
+              <td>$${r.item.cost.toFixed(2)}</td>
+              <td>$${r.item.sell.toFixed(2)}</td>
+              <td class="${r.margin > 0 ? 'margin-positive' : 'margin-zero'}">${r.pct.toFixed(1)}%</td>
+              <td class="${r.estProfit > 0 ? 'margin-positive' : 'margin-zero'}">$${r.estProfit.toFixed(2)}</td>
+            </tr>`).join('')}
         </tbody>
+        <tfoot>
+          <tr style="font-weight:700;border-top:2px solid var(--border)">
+            <td colspan="3">Weighted Average</td>
+            <td class="margin-positive">${weightedAvgPct}%</td>
+            <td class="margin-positive">$${totalEstProfit.toFixed(2)}</td>
+          </tr>
+        </tfoot>
       </table>
-    </div>`;
+    </div>
+    ${unpriced.length > 0 ? `
+      <div style="margin-top:1.25rem">
+        <div style="font-weight:600;margin-bottom:0.5rem;color:var(--text-muted)">Unpriced Items (${unpriced.length})</div>
+        <div style="display:flex;flex-wrap:wrap;gap:0.4rem">
+          ${unpriced.map(i => `<span style="background:var(--surface-2);padding:0.2rem 0.5rem;border-radius:4px;font-size:0.8rem">${esc(i.name)}${i.flavor ? ` (${esc(i.flavor)})` : ''}</span>`).join('')}
+        </div>
+      </div>` : ''}`;
 }
 
 function renderLowStockReport() {
@@ -878,6 +918,27 @@ function openItemModal(itemId) {
 
   document.getElementById('item-modal').classList.remove('hidden');
   document.getElementById('f-name').focus();
+  updateModalMargin();
+}
+
+function updateModalMargin() {
+  const cost = parseFloat(document.getElementById('f-cost').value);
+  const sell = parseFloat(document.getElementById('f-sell').value);
+  const grp  = document.getElementById('modal-margin-group');
+  const disp = document.getElementById('modal-margin-display');
+  if (cost > 0 && sell > 0 && sell > cost) {
+    const pct = ((sell - cost) / sell * 100).toFixed(1);
+    disp.textContent = `${pct}%`;
+    disp.style.color = 'var(--success)';
+    grp.style.display = '';
+  } else if (cost > 0 && sell > 0) {
+    const pct = ((sell - cost) / sell * 100).toFixed(1);
+    disp.textContent = `${pct}%`;
+    disp.style.color = 'var(--danger)';
+    grp.style.display = '';
+  } else {
+    grp.style.display = 'none';
+  }
 }
 
 function closeItemModal() {
@@ -1034,29 +1095,71 @@ function saveApiKey() {
 function parseNLLocal(text) {
   const t = text.toLowerCase();
 
+  // 1. Action detection
   let action = null;
-  if (/\b(sold|sale|sell|rang up|bought by|purchased by)\b/.test(t))        action = 'sale';
+  if (/\b(sold|sale|sell|rang up|bought by|purchased by)\b/.test(t))               action = 'sale';
   else if (/\b(restocked|restock|received|got in|added|delivered|stocked)\b/.test(t)) action = 'restock';
-  else if (/\b(tossed|expired|damaged|broke|broken|disposed|wasted|trashed|expired|spoiled)\b/.test(t)) action = 'damaged';
-  else if (/\b(return|returned|refund|gave back)\b/.test(t))                action = 'return';
+  else if (/\b(tossed|damaged|broke|broken|disposed|wasted|trashed|spoiled)\b/.test(t)) action = 'damaged';
+  else if (/\b(expired)\b/.test(t))                                                 action = 'damaged';
+  else if (/\b(return|returned|refund|gave back)\b/.test(t))                        action = 'return';
 
   if (!action) return null;
 
+  // 2. Quantity
   const qtyMatch = t.match(/\b(\d+)\b/);
   const qty = qtyMatch ? parseInt(qtyMatch[1]) : 1;
 
-  // Score items by keyword overlap
-  const words = t.split(/\W+/).filter(w => w.length >= 3);
-  let best = null, bestScore = 0;
-  items.forEach(item => {
-    const hay = [item.name, item.brand, item.flavor, item.type].join(' ').toLowerCase();
-    let score = 0;
-    words.forEach(w => { if (hay.includes(w)) score++; });
-    if (score > bestScore) { bestScore = score; best = item; }
-  });
+  // 3. Build input tokens — strip action words, stop words, and the qty number
+  const stopWords = new Set([
+    'sold','sale','sell','rang','up','bought','by','purchased',
+    'restocked','restock','received','got','in','added','delivered','stocked',
+    'tossed','expired','damaged','broke','broken','disposed','wasted','trashed','spoiled',
+    'returned','return','refund','gave','back',
+    'a','an','the','some','few','couple','of', String(qty),
+  ]);
+  const inputTokens = t.split(/\W+/).filter(w => w.length >= 2 && !stopWords.has(w));
 
-  if (!best || bestScore === 0) return { action, qty, item: null, ambiguous: true };
-  return { action, qty, item: best, ambiguous: false };
+  if (inputTokens.length === 0) return { action, qty, item: null, ambiguous: true, suggestions: [] };
+
+  // 4. Brand-first priority: detect if any known brand appears in the input
+  const brandNames = [...new Set(items.map(i => i.brand).filter(Boolean))];
+  let detectedBrand = null;
+  for (const brand of brandNames) {
+    const brandTokens = brand.toLowerCase().split(/\W+/).filter(w => w.length >= 2);
+    if (brandTokens.length > 0 && brandTokens.every(bt => inputTokens.some(it => it.includes(bt) || bt.includes(it)))) {
+      detectedBrand = brand;
+      break;
+    }
+  }
+
+  // 5. Token-overlap scorer: (matching tokens) / (total tokens in item fields)
+  function scoreItem(item) {
+    const itemStr = [item.name, item.brand, item.flavor, item.type].join(' ').toLowerCase();
+    const itemTokens = itemStr.split(/\W+/).filter(w => w.length >= 2);
+    if (itemTokens.length === 0) return 0;
+    const matches = inputTokens.filter(it => itemTokens.some(jt => jt.includes(it) || it.includes(jt))).length;
+    return matches / itemTokens.length;
+  }
+
+  // 6. Score brand-filtered pool first; fall back to all items if no good match
+  let pool = detectedBrand
+    ? items.filter(i => i.brand && i.brand.toLowerCase() === detectedBrand.toLowerCase())
+    : items;
+
+  let scored = pool.map(item => ({ item, score: scoreItem(item) })).sort((a, b) => b.score - a.score);
+
+  // If brand was detected but no flavor match, widen to full inventory
+  if (detectedBrand && (scored.length === 0 || scored[0].score < 0.4)) {
+    scored = items.map(item => ({ item, score: scoreItem(item) })).sort((a, b) => b.score - a.score);
+  }
+
+  const suggestions = scored.slice(0, 3).filter(s => s.score > 0).map(s => s.item);
+
+  if (!scored[0] || scored[0].score < 0.4) {
+    return { action, qty, item: null, ambiguous: true, suggestions };
+  }
+
+  return { action, qty, item: scored[0].item, ambiguous: false, suggestions };
 }
 
 function nlSubmit() {
@@ -1079,10 +1182,15 @@ function nlSubmit() {
       return;
     }
     if (!result.item || result.ambiguous) {
+      const suggestions = result.suggestions || [];
+      let clarifyMsg = `Understood "${result.action}" × ${result.qty} — which item? Type part of the name:`;
+      if (suggestions.length > 0) {
+        const names = suggestions.map(s => [s.name, s.flavor].filter(Boolean).join(' ')).join(', ');
+        clarifyMsg = `Item not found — did you mean: ${names}? Or type part of the name:`;
+      }
       statusEl.classList.add('hidden');
       nlPendingResult = result;
-      document.getElementById('nl-clarify-text').textContent =
-        `Understood "${result.action}" × ${result.qty} — which item? Type part of the name:`;
+      document.getElementById('nl-clarify-text').textContent = clarifyMsg;
       clarifyEl.classList.remove('hidden');
       document.getElementById('nl-clarify-input').value = '';
       document.getElementById('nl-clarify-input').focus();
