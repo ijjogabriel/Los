@@ -222,7 +222,102 @@ function logout() {
 }
 
 // ===== MIGRATIONS =====
+function runMigrationV2() {
+  if (localStorage.getItem('lcg_migration_v2')) return;
+
+  // Order matters — more specific rules must come before broader ones
+  const rules = [
+    // RAW tub products (before generic Thavage / RAW rules)
+    { test: n => /cbum.*thavage/i.test(n) || (/thavage/i.test(n) && /tub/i.test(n)), price: 50.00 },
+    { test: n => /raw creatine/i.test(n), price: 16.00 },
+    // LMNT RTDs (before generic LMNT packet rule)
+    { test: n => /lmnt/i.test(n) && /rtd/i.test(n) && /12\s*oz/i.test(n), price: 3.50 },
+    { test: n => /lmnt/i.test(n) && /rtd/i.test(n) && /16\s*oz/i.test(n), price: 4.00 },
+    // Bloom Pops (before Bloom Energy)
+    { test: n => /bloom pops/i.test(n), price: 2.75 },
+    // Energy Drinks
+    { test: n => /alani nu/i.test(n), price: 2.75 },
+    { test: n => /ghost energy/i.test(n), price: 3.33 },
+    { test: n => /bum energy/i.test(n) || /dr\.?\s*bum/i.test(n), price: 3.25 },
+    { test: n => /celsius/i.test(n), price: 3.00 },
+    { test: n => /\bc4\b/i.test(n), price: 3.00 },
+    { test: n => /monster/i.test(n), price: 2.53 },
+    { test: n => /reign/i.test(n), price: 3.50 },
+    { test: n => /3d energy/i.test(n), price: 3.00 },
+    { test: n => /amino energy/i.test(n), price: 2.89 },
+    { test: n => /bloom (energy|sparkling)/i.test(n), price: 3.00 },
+    { test: n => /weld energy/i.test(n), price: 4.50 },
+    { test: n => /red bull/i.test(n), price: 3.00 },
+    { test: n => /oxyshred/i.test(n), price: 3.00 },
+    // Water / Sports Drinks
+    { test: n => /ice mountain/i.test(n), price: 1.50 },
+    { test: n => /smart water/i.test(n), price: 2.50 },
+    { test: n => /gatorade/i.test(n), price: 3.00 },
+    { test: n => /vitamin water/i.test(n), price: 3.00 },
+    { test: n => /body armor flash/i.test(n), price: 3.50 },
+    // Protein Shakes
+    { test: n => /core power/i.test(n), price: 5.00 },
+    { test: n => /fairlife/i.test(n), price: 4.00 },
+    { test: n => /raw protein rtd/i.test(n), price: 4.00 },
+    { test: n => /lean body/i.test(n), price: 5.00 },
+    { test: n => /mre/i.test(n) && /rtd/i.test(n), price: 5.00 },
+    { test: n => /quest/i.test(n), price: 5.50 },
+    // Pre-Workout RTDs
+    { test: n => /thavage pre.?workout/i.test(n), price: 4.11 },
+    { test: n => /total war pre.?workout/i.test(n), price: 4.11 },
+    { test: n => /evogen pre.?workout/i.test(n), price: 4.15 },
+    { test: n => /kxr pre.?workout/i.test(n), price: 4.91 },
+    { test: n => /pandemic pre.?workout/i.test(n), price: 4.50 },
+    { test: n => /savage pre.?workout/i.test(n), price: 4.11 },
+    { test: n => /juicy pumps/i.test(n), price: 4.11 },
+    { test: n => /hostility pre.?workout/i.test(n), price: 4.11 },
+    { test: n => /charge pre.?workout/i.test(n), price: 4.00 },
+    { test: n => /110%.*pre.?workout/i.test(n), price: 4.00 },
+    { test: n => /gorilla mind/i.test(n), price: 3.50 },
+    // Protein / Snack Bars
+    { test: n => /raw protein bar/i.test(n), price: 4.00 },
+    { test: n => /mre (bar|protein bar)/i.test(n), price: 5.00 },
+    { test: n => /barebell/i.test(n), price: 3.50 },
+    // LMNT packets (after RTD rules above)
+    { test: n => /lmnt/i.test(n), price: 2.00 },
+  ];
+
+  let updated = 0;
+  try {
+    const savedItems = JSON.parse(localStorage.getItem('lc_items') || '[]');
+    savedItems.forEach(item => {
+      const name = item.name || '';
+      for (const rule of rules) {
+        if (rule.test(name)) {
+          item.sell = rule.price;
+          updated++;
+          break;
+        }
+      }
+    });
+    localStorage.setItem('lc_items', JSON.stringify(savedItems));
+  } catch(e) { console.warn('Migration v2 localStorage error:', e); }
+
+  if (db) {
+    db.collection('lc_items').get().then(snap => {
+      snap.forEach(doc => {
+        const name = (doc.data().name || '');
+        for (const rule of rules) {
+          if (rule.test(name)) {
+            doc.ref.update({ sell: rule.price });
+            break;
+          }
+        }
+      });
+    }).catch(() => {});
+  }
+
+  console.log(`[Migration v2] Updated sell prices on ${updated} items`);
+  localStorage.setItem('lcg_migration_v2', '1');
+}
+
 function runMigrations() {
+  runMigrationV2();
   // v1: rename Savage → Thavage in existing saved items
   if (!localStorage.getItem('lcg_migration_v1')) {
     const saved = localStorage.getItem('lc_items');
@@ -638,7 +733,7 @@ function renderHistory() {
         <div class="hist-action-badge ${h.action}">${h.action}</div>
         <div class="hist-main">
           <div class="hist-item-name">${esc(h.itemName)}</div>
-          <div class="hist-detail">${qtyStr ? esc(qtyStr) + ' ' + esc(h.unit || '') : ''}${h.detail ? ' — ' + esc(h.detail) : ''}</div>
+          <div class="hist-detail">${qtyStr ? esc(qtyStr) + ' ' + esc(h.unit || '') : ''}${h.detail ? ' — ' + esc(h.detail) : ''}${h.action === 'sale' && h.total != null ? ` <span style="color:var(--success);font-weight:600">+$${h.total.toFixed(2)} (incl. tax)</span>` : ''}</div>
           ${h.note ? `<div class="hist-note">${esc(h.note)}</div>` : ''}
         </div>
         <div class="hist-time">${fmtDate(new Date(h.timestamp))}<br>
@@ -669,6 +764,22 @@ function addHistory(item, action, qty, note, detail) {
     detail: detail || '',
     role: currentRole,
   };
+
+  if (action === 'sale') {
+    const TAX_RATE = 0.0903;
+    entry.taxRate = TAX_RATE;
+    if (item.sell > 0) {
+      const preTaxTotal = item.sell * qty;
+      entry.preTaxTotal = preTaxTotal;
+      entry.taxAmount   = Math.round(preTaxTotal * TAX_RATE * 100) / 100;
+      entry.total       = Math.round((preTaxTotal + entry.taxAmount) * 100) / 100;
+    } else {
+      entry.preTaxTotal = null;
+      entry.taxAmount   = null;
+      entry.total       = null;
+    }
+  }
+
   history.unshift(entry);
   if (history.length > 1000) history = history.slice(0, 1000);
   fWriteHistory(entry);
