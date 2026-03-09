@@ -1393,3 +1393,20 @@ shakeStyle.textContent = `
   }
 `;
 document.head.appendChild(shakeStyle);
+// --- Emergency reseed tool ---
+window.debugForceReseed = async function () {
+  console.log("Forcing inventory reseed...");
+
+  localStorage.removeItem("lcg_seeded");
+  localStorage.removeItem("lc_items");
+  localStorage.removeItem("lc_history");
+
+  if (typeof seedInventory === "function") {
+    await seedInventory();
+    console.log("Reseed complete.");
+  } else {
+    console.error("seedInventory() not found.");
+  }
+
+  location.reload();
+};
